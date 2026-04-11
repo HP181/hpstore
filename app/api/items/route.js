@@ -1,3 +1,4 @@
+// app/api/items/route.js
 import { NextResponse } from "next/server";
 import Item from "@/models/item"; // adjust path if needed
 import { auth } from "@clerk/nextjs/server";
@@ -20,44 +21,75 @@ export async function GET(req) {
     }
 
     const { searchParams } = new URL(req.url);
-    console.log("searchParams", searchParams);
 
     const parentId = searchParams.get("parentId");
-    const type = searchParams.get("type"); // file | folder
+    const type = searchParams.get("type");
     const search = searchParams.get("search");
+
+    const trashed = searchParams.get("trashed");
+    const starred = searchParams.get("starred");
+    const shared = searchParams.get("shared");
+
     const sortBy = searchParams.get("sortBy") || "createdAt";
     const order = searchParams.get("order") === "asc" ? 1 : -1;
+
     const page = Math.max(parseInt(searchParams.get("page") || "1"), 1);
     const limit = Math.min(parseInt(searchParams.get("limit") || "20"), 100);
-
     const skip = (page - 1) * limit;
 
-    // -----------------------
-    // BUILD QUERY (SAFE)
-    // -----------------------
-    const query = {
-      ownerId: userId, // ✅ FIX: no frontend ownerId needed
-      isTrashed: false,
-    };
+    // =========================
+    // BASE QUERY
+    // =========================
+    let query = {};
 
-    // parent filter (root = null)
-    if (parentId !== null && parentId !== undefined) {
-      query.parentId = parentId === "null" ? null : parentId;
+    // -------------------------
+    // MODE HANDLING
+    // -------------------------
+    if (trashed === "true") {
+      query = {
+        ownerId: userId,
+        isTrashed: true,
+      };
+    } else if (starred === "true") {
+      query = {
+        ownerId: userId,
+        isTrashed: false,
+        starredBy: userId,
+      };
+    } else if (shared === "true") {
+      query = {
+        isTrashed: false,
+        "permissions.userId": userId,
+      };
+    } else {
+      // NORMAL DRIVE VIEW
+      query = {
+        ownerId: userId,
+        isTrashed: false,
+        parentId: parentId === "null" ? null : parentId,
+      };
     }
 
-    // type filter
+    // -------------------------
+    // TYPE FILTER
+    // -------------------------
     if (type && ["file", "folder"].includes(type)) {
       query.type = type;
     }
 
-    // text search
+    // -------------------------
+    // SEARCH (SAFE fallback)
+    // -------------------------
     if (search && search.trim()) {
-      query.$text = { $search: search.trim() };
+      query.name = {
+        $regex: search.trim(),
+        $options: "i",
+      };
     }
 
-    // -----------------------
-    // SORT SAFETY (prevent injection)
-    // -----------------------
+    // -------------------------
+    // SORT SAFETY
+    // -------------------------
     const allowedSortFields = [
       "createdAt",
       "updatedAt",
@@ -69,9 +101,9 @@ export async function GET(req) {
       ? sortBy
       : "createdAt";
 
-    // -----------------------
-    // FETCH DATA
-    // -----------------------
+    // =========================
+    // FETCH
+    // =========================
     const [items, total] = await Promise.all([
       Item.find(query)
         .sort({ [safeSortBy]: order })
@@ -81,11 +113,7 @@ export async function GET(req) {
 
       Item.countDocuments(query),
     ]);
-console.log("items", items);
-console.log("pagination", total, page,
-        limit,
-        total,
-        Math.ceil(total / limit));
+
     return NextResponse.json({
       success: true,
       data: items,
@@ -98,6 +126,7 @@ console.log("pagination", total, page,
     });
   } catch (error) {
     console.error("GET /items error:", error);
+
     return NextResponse.json(
       { success: false, message: error.message },
       { status: 500 }

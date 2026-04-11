@@ -24,7 +24,7 @@ export function DriveProvider({
   const [currentFolderId, setCurrentFolderId] = useState(initialFolderId);
 
   const [search, setSearch] = useState("");
-  const [sortBy, setSortBy] = useState("name");
+const [sortBy, setSortBy] = useState("name");
   const [sortOrder, setSortOrder] = useState("asc");
   const [viewMode, setViewMode] = useState("grid");
   const [filterType, setFilterType] = useState("all");
@@ -44,54 +44,82 @@ export function DriveProvider({
     }
   }, [pathname]);
 
-  const fetchItems = useCallback(async () => {
-    const fetchId = ++fetchRef.current;
+  useEffect(() => {
+  setCurrentFolderId(initialFolderId);
+}, [initialFolderId]);
 
-    setLoading(true);
-
-    try {
-      const params = new URLSearchParams();
-
-      // mode filters
-      if (mode === "trash") params.set("trashed", "true");
-      if (mode === "starred") params.set("starred", "true");
-      if (mode === "shared") params.set("shared", "true");
-
-      // ✅ FIX: folder logic
-      if (mode === "drive") {
-        if (currentFolderId) {
-          params.set("parentId", currentFolderId);
-        } else {
-          params.set("parentId", "null");
-        }
-      }
-
-      // search + filters
-      if (search) params.set("search", search);
-      if (filterType !== "all") params.set("type", filterType);
-
-      params.set("sortBy", sortBy);
-      params.set("order", sortOrder);
-
-      const res = await fetch(`/api/items?${params.toString()}`);
-      const data = await res.json();
-
-      if (fetchId === fetchRef.current) {
-        setItems(data.data || []);
-        setSelectedItems([]);
-      }
-    } catch (err) {
-      console.error("Fetch error:", err);
-    } finally {
-      if (fetchId === fetchRef.current) {
-        setLoading(false);
-      }
-    }
-  }, [currentFolderId, search, sortBy, sortOrder, filterType, mode]);
 
   useEffect(() => {
-    fetchItems();
-  }, [fetchItems]);
+  setSearch("");
+}, [currentFolderId]);
+
+const fetchItems = useCallback(async () => {
+  const fetchId = ++fetchRef.current;
+  setLoading(true);
+
+  try {
+    const params = new URLSearchParams();
+
+    // --------------------
+    // MODE FILTERS
+    // --------------------
+    if (mode === "trash") {
+      params.set("trashed", "true");
+    } else if (mode === "starred") {
+      params.set("starred", "true");
+    } else if (mode === "shared") {
+      params.set("shared", "true");
+    } else {
+      params.set("parentId", currentFolderId || "null");
+    }
+
+    // --------------------
+    // SEARCH
+    // --------------------
+    if (search?.trim()) {
+      params.set("search", search.trim());
+    }
+
+    // --------------------
+    // FILTER TYPE
+    // --------------------
+    if (filterType !== "all") {
+      params.set("type", filterType);
+    }
+
+    // --------------------
+    // SORT
+    // --------------------
+    params.set("sortBy", sortBy);
+    params.set("order", sortOrder);
+
+    const res = await fetch(`/api/items?${params.toString()}`);
+    const data = await res.json();
+    console .log("Fetched items:", data.data);
+
+    if (fetchId === fetchRef.current) {
+      setItems(data.data || []);
+      setSelectedItems([]);
+    }
+  } catch (err) {
+    console.error("Fetch error:", err);
+  } finally {
+    if (fetchId === fetchRef.current) {
+      setLoading(false);
+    }
+  }
+}, [currentFolderId, search, sortBy, sortOrder, filterType, mode]);
+
+useEffect(() => {
+  fetchItems();
+}, [
+  currentFolderId,
+  search,
+  sortBy,
+  sortOrder,
+  filterType,
+  mode,
+]);
 
   const refreshItems = useCallback(() => fetchItems(), [fetchItems]);
 

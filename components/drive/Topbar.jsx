@@ -16,6 +16,7 @@ import {
 
 import { useTheme } from "@/components/ThemeProvider";
 import { useDrive } from "@/hooks/use-drive";
+import { SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue, Select } from "../ui/select";
 
 export default function Topbar() {
   const { theme, setTheme } = useTheme();
@@ -38,17 +39,17 @@ export default function Topbar() {
   // -----------------------
   // SEARCH (debounced)
   // -----------------------
-  function handleSearch(val) {
-    setSearchVal(val);
+function handleSearch(val) {
+  setSearchVal(val);
 
-    if (searchTimeout.current) {
-      clearTimeout(searchTimeout.current);
-    }
-
-    searchTimeout.current = setTimeout(() => {
-      setSearch(val);
-    }, 350);
+  if (searchTimeout.current) {
+    clearTimeout(searchTimeout.current);
   }
+
+  searchTimeout.current = setTimeout(() => {
+    setSearch(val.trim());
+  }, 400);
+}
 
   useEffect(() => {
     return () => {
@@ -126,17 +127,23 @@ export default function Topbar() {
       </div>
 
       {/* SORT */}
-      <select
-        value={sortBy}
-        onChange={(e) => setSortBy(e.target.value)}
-        className="text-xs border border-[hsl(var(--border))] rounded-lg px-2 py-1.5 bg-[hsl(var(--background))] text-[hsl(var(--foreground))] focus:outline-none focus:ring-1 focus:ring-blue-500"
-      >
-        {sortOptions.map(({ value, label }) => (
-          <option key={value} value={value}>
-            {label}
-          </option>
-        ))}
-      </select>
+   <Select value={sortBy} onValueChange={setSortBy}>
+  <SelectTrigger className="text-xs border border-border rounded-lg px-2 py-1.5 text-foreground focus:outline-none focus:ring-1 focus:ring-ring w-auto min-w-30">
+    <SelectValue placeholder="Sort by" />
+  </SelectTrigger>
+
+  <SelectContent className="bg-taupe-800 text-popover-foreground border border-border">
+    <SelectGroup>
+      {sortOptions.map(({ value, label }) => (
+        <SelectItem key={value} value={value} className="hover:cursor-pointer">
+          {label}
+        </SelectItem>
+      ))}
+    </SelectGroup>
+  </SelectContent>
+</Select>
+
+     
 
       {/* ORDER */}
       <button

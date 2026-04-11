@@ -353,8 +353,6 @@ const handleOpen = useCallback((item) => {
 // -----------------------
 export default function DriveView({ folderId, mode = "drive" }) {
   return (
-    <DriveProvider initialFolderId={folderId} mode={mode}>
-      <DriveContent folderId={folderId} mode={mode} />
-    </DriveProvider>
+    <DriveContent folderId={folderId} mode={mode} />
   );
 }
