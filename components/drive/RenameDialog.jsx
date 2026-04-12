@@ -7,7 +7,11 @@ export default function RenameDialog({ open, item, onClose, onSuccess }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  useEffect(() => { if (item) setName(item.name); }, [item]);
+  useEffect(() => { 
+    if (item) setName(item.name); 
+    console.log("ii", item);
+  },[item]
+  );
 
   if (!open || !item) return null;
 

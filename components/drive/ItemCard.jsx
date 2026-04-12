@@ -1,34 +1,61 @@
 "use client";
-import { useRouter } from "next/navigation";
+
 import { Star, MoreVertical } from "lucide-react";
 import { useAuth } from "@clerk/nextjs";
 import FileIcon from "./FileIcon";
-import { formatBytes, formatDate, getFileIcon, isPreviewable } from "@/lib/utils";
+import {
+  formatBytes,
+  formatDate,
+  getFileIcon,
+  isPreviewable,
+} from "@/lib/utils";
 import { cn } from "@/lib/utils";
 
 export default function ItemCard({
-  item, selected, onSelect, onContextMenu, onOpen, onAction
+  item,
+  selected = false,
+  onSelect,
+  onContextMenu,
+  onOpen,
+  onAction,
 }) {
   const { userId } = useAuth();
-  const isOwner = item.ownerId === userId;
+
   const isStarred = item.starredBy?.includes(userId);
   const fileType = getFileIcon(item.mimeType, item.name);
-  const canPreview = item.type === "file" && isPreviewable(item.mimeType, item.name);
+  const canPreview =
+    item.type === "file" &&
+    isPreviewable(item.mimeType, item.name);
 
+  // -----------------------
+  // CLICK HANDLER
+  // -----------------------
   function handleClick(e) {
-    if (e.ctrlKey || e.metaKey) { onSelect(item._id); return; }
-    if (item.type === "folder") { onOpen(item); return; }
-    if (canPreview) { onAction("preview", item); return; }
+    if (e.ctrlKey || e.metaKey) {
+      e.stopPropagation();
+      onSelect?.(item._id);
+      return;
+    }
+
+    if (item.type === "folder") {
+      onOpen?.(item);
+      return;
+    }
+
+    if (canPreview) {
+      onAction?.("preview", item);
+    }
   }
 
   function handleDblClick() {
-    if (item.type === "folder") onOpen(item);
-    else if (canPreview) onAction("preview", item);
+    if (item.type === "folder") onOpen?.(item);
+    else if (canPreview) onAction?.("preview", item);
   }
 
   function handleContextMenu(e) {
     e.preventDefault();
-    onContextMenu(e, item);
+    e.stopPropagation();
+    onContextMenu?.(e, item); // ✅ SAFE
   }
 
   return (
@@ -48,17 +75,37 @@ export default function ItemCard({
       <div
         className={cn(
           "absolute top-2 left-2 z-10 transition-opacity",
-          selected ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+          selected
+            ? "opacity-100"
+            : "opacity-0 group-hover:opacity-100"
         )}
-        onClick={(e) => { e.stopPropagation(); onSelect(item._id); }}
+        onClick={(e) => {
+          e.stopPropagation();
+          onSelect?.(item._id);
+        }}
       >
-        <div className={cn(
-          "w-5 h-5 rounded-md border-2 flex items-center justify-center transition-colors",
-          selected ? "bg-blue-600 border-blue-600" : "border-[hsl(var(--border))] bg-[hsl(var(--card))]"
-        )}>
+        <div
+          className={cn(
+            "w-5 h-5 rounded-md border-2 flex items-center justify-center transition-colors",
+            selected
+              ? "bg-blue-600 border-blue-600"
+              : "border-[hsl(var(--border))] bg-[hsl(var(--card))]"
+          )}
+        >
           {selected && (
-            <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
-              <path d="M2 5L4.2 7.2L8 3" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+            <svg
+              width="10"
+              height="10"
+              viewBox="0 0 10 10"
+              fill="none"
+            >
+              <path
+                d="M2 5L4.2 7.2L8 3"
+                stroke="white"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
             </svg>
           )}
         </div>
@@ -67,13 +114,20 @@ export default function ItemCard({
       {/* Star */}
       {isStarred && (
         <div className="absolute top-2 right-8 z-10">
-          <Star size={12} fill="#EAB308" className="text-yellow-500" />
+          <Star
+            size={12}
+            fill="#EAB308"
+            className="text-yellow-500"
+          />
         </div>
       )}
 
       {/* More menu */}
       <button
-        onClick={(e) => { e.stopPropagation(); onContextMenu({ clientX: e.clientX, clientY: e.clientY }, item); }}
+        onClick={(e) => {
+          e.stopPropagation();
+          onContextMenu?.(e, item); // ✅ FIXED
+        }}
         className="absolute top-1.5 right-1.5 z-10 p-1 rounded-md opacity-0 group-hover:opacity-100 hover:bg-[hsl(var(--accent))] text-[hsl(var(--muted-foreground))] transition-all"
       >
         <MoreVertical size={14} />
@@ -88,7 +142,9 @@ export default function ItemCard({
               alt={item.name}
               className="w-full h-full object-cover"
               loading="lazy"
-              onError={(e) => { e.target.style.display = "none"; }}
+              onError={(e) => {
+                e.currentTarget.style.display = "none";
+              }}
             />
           </div>
         ) : (
@@ -98,11 +154,17 @@ export default function ItemCard({
 
       {/* Info */}
       <div className="px-3 pb-3">
-        <p className="text-sm font-medium text-[hsl(var(--foreground))] truncate leading-tight" title={item.name}>
+        <p
+          className="text-sm font-medium text-[hsl(var(--foreground))] truncate"
+          title={item.name}
+        >
           {item.name}
         </p>
         <p className="text-xs text-[hsl(var(--muted-foreground))] mt-0.5">
-          {item.type === "file" ? formatBytes(item.size) : "Folder"} · {formatDate(item.updatedAt)}
+          {item.type === "file"
+            ? formatBytes(item.size)
+            : "Folder"}{" "}
+          · {formatDate(item.updatedAt)}
         </p>
       </div>
     </div>

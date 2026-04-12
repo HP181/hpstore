@@ -5,20 +5,18 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@clerk/nextjs";
 import { Loader2, FolderOpen } from "lucide-react";
 
-import { DriveProvider, useDrive } from "@/hooks/use-drive";
+import { useDrive } from "@/hooks/use-drive";
 import BreadcrumbNav from "./BreadcrumbNav";
 import ItemCard from "./ItemCard";
 import ItemRow from "./ItemRow";
 import ItemContextMenu from "./ItemContextMenu";
+import PermissionsDialog from "./PermissionDialog";
 import RenameDialog from "./RenameDialog";
 import MoveDialog from "./MoveDialog";
-import PermissionsDialog from "./PermissionDialog";
-import MediaViewer from "./MediaViewer";
 import DeleteConfirmDialog from "./DeleteConfirmDialog";
-import BulkToolbar from "./BulkToolbar";
-import { isPreviewable } from "@/lib/utils";
+import MediaViewer from "./MediaViewer";
 
-function DriveContent({ folderId, mode }) {
+export default function DriveView({ folderId }) {
   const router = useRouter();
   const { userId } = useAuth();
 
@@ -31,29 +29,27 @@ function DriveContent({ folderId, mode }) {
     clearSelection,
     refreshItems,
     setCurrentFolderId,
+    mode,
   } = useDrive();
 
   const [contextMenu, setContextMenu] = useState(null);
+  const [shareItem, setShareItem] = useState(null);
   const [renameItem, setRenameItem] = useState(null);
   const [moveItems, setMoveItems] = useState(null);
-  const [shareItem, setShareItem] = useState(null);
-  const [mediaItem, setMediaItem] = useState(null);
   const [deleteItems, setDeleteItems] = useState(null);
+  const [mediaItem, setMediaItem] = useState(null);
 
-  // -----------------------
-  // OPEN FOLDER
-  // -----------------------
-const handleOpen = useCallback((item) => {
-  if (item.type !== "folder") return;
+  const handleOpen = useCallback(
+    (item) => {
+      if (item.type !== "folder") return;
+      if (mode !== "drive") return;
 
-  setCurrentFolderId(item._id);
+      setCurrentFolderId(item._id);
+      router.push(`/drive/${item._id}`);
+    },
+    [router, setCurrentFolderId, mode]
+  );
 
-  router.push(`/drive/${item._id}`);
-}, [router, setCurrentFolderId]);
-
-  // -----------------------
-  // CONTEXT MENU
-  // -----------------------
   const handleContextMenu = useCallback((e, item) => {
     e.preventDefault();
     setContextMenu({ x: e.clientX, y: e.clientY, item });
@@ -61,298 +57,175 @@ const handleOpen = useCallback((item) => {
 
   const handleAction = useCallback(
     async (action, item) => {
-      const target = item || contextMenu?.item;
-      if (!target) return;
+      if (!item) return;
 
       switch (action) {
-        case "preview":
-          setMediaItem(target);
-          break;
-
-        case "download": {
-          const a = document.createElement("a");
-          a.href = `/api/download/${target._id}`;
-          a.download = target.name;
-          a.click();
-          break;
-        }
-
-        case "rename":
-          setRenameItem(target);
-          break;
-
-        case "move":
-          setMoveItems([target]);
-          break;
-
         case "share":
-          setShareItem(target);
+          setShareItem(item);
           break;
 
         case "toggleStar":
-          await fetch(`/api/items/${target._id}`, {
+          await fetch(`/api/items/${item._id}`, {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-              starred: !target.starredBy?.includes(userId),
+              starred: !item.starredBy?.includes(userId),
             }),
           });
           refreshItems();
           break;
 
+        case "rename":
+          setRenameItem(item);
+          break;
+
+        case "move":
+          setMoveItems([item]);
+          break;
+
+        case "copyLink":
+          await navigator.clipboard.writeText(
+            `${window.location.origin}/api/download/${item._id}?inline=true`
+          );
+          break;
+
         case "trash":
-          await fetch(`/api/items/${target._id}`, {
+          await fetch(`/api/items/${item._id}?q=trash`, {
             method: "PATCH",
-            headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ isTrashed: true }),
           });
           refreshItems();
           break;
 
         case "restore":
-          await fetch(`/api/items/${target._id}`, {
+          await fetch(`/api/items/${item._id}?q=restore`, {
             method: "PATCH",
-            headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ isTrashed: false }),
           });
           refreshItems();
           break;
 
         case "deletePermanent":
-          setDeleteItems([target]);
+          setDeleteItems([item]);
           break;
 
-        case "copyLink":
-          navigator.clipboard.writeText(
-            `${window.location.origin}/api/download/${target._id}?inline=true`
-          );
+        case "download": {
+          const a = document.createElement("a");
+          a.href = `/api/download/${item._id}`;
+          a.click();
           break;
-      }
-    },
-    [contextMenu, userId, refreshItems]
-  );
+        }
 
-  // -----------------------
-  // BULK ACTIONS
-  // -----------------------
-  const handleBulkAction = useCallback(
-    async (action) => {
-      const selected = items.filter((i) =>
-        selectedItems.includes(i._id)
-      );
-
-      switch (action) {
-        case "downloadAll":
-          selected.forEach((item) => {
-            const a = document.createElement("a");
-            a.href = `/api/download/${item._id}`;
-            a.download = item.name;
-            a.click();
-          });
-          break;
-
-        case "trashAll":
-          await Promise.all(
-            selected.map((item) =>
-              fetch(`/api/items/${item._id}`, {
-                method: "PATCH",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ isTrashed: true }),
-              })
-            )
-          );
-          clearSelection();
-          refreshItems();
-          break;
-
-        case "restoreAll":
-          await Promise.all(
-            selected.map((item) =>
-              fetch(`/api/items/${item._id}`, {
-                method: "PATCH",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ isTrashed: false }),
-              })
-            )
-          );
-          clearSelection();
-          refreshItems();
-          break;
-
-        case "deleteAll":
-          setDeleteItems(selected);
+        case "preview":
+          setMediaItem(item);
           break;
       }
     },
-    [items, selectedItems, clearSelection, refreshItems]
+    [userId, refreshItems]
   );
-
-  async function handleDeleteConfirm() {
-    if (!deleteItems) return;
-
-    await Promise.all(
-      deleteItems.map((item) =>
-        fetch(`/api/items/${item._id}`, { method: "DELETE" })
-      )
-    );
-
-    setDeleteItems(null);
-    clearSelection();
-    refreshItems();
-  }
-
-  // -----------------------
-  // FILTER PREVIEWABLE
-  // -----------------------
-  const previewableItems = items.filter(
-    (i) => i.type === "file" && isPreviewable(i.mimeType, i.name)
-  );
-
-  // -----------------------
-  // EMPTY STATE
-  // -----------------------
-  function EmptyState() {
-    return (
-      <div className="flex flex-col items-center justify-center h-full text-center py-20">
-        <FolderOpen size={40} className="text-muted-foreground mb-3" />
-        <p className="text-base font-semibold">This folder is empty</p>
-        <p className="text-sm text-muted-foreground mt-1">
-          Upload files or create folders to get started
-        </p>
-      </div>
-    );
-  }
 
   return (
-    <div
-      className="flex flex-col h-full w-full overflow-hidden bg-background"
-      onClick={() => {
-        clearSelection();
-        setContextMenu(null);
-      }}
-    >
+    <div className="flex flex-col h-full" onClick={clearSelection}>
       {/* HEADER */}
-      <div className="px-6 py-3 border-b border-border shrink-0 bg-card">
-        <BreadcrumbNav folderId={folderId} />
-      </div>
+      {mode === "drive" && (
+        <div className="p-4 border-b">
+          <BreadcrumbNav folderId={folderId} />
+        </div>
+      )}
 
       {/* CONTENT */}
-      <div className="flex-1 overflow-y-auto px-6 py-4">
+      <div className="flex-1 p-4 overflow-auto">
         {loading ? (
-          <div className="flex items-center justify-center h-60">
-            <Loader2 className="animate-spin text-blue-500" />
-          </div>
+          <Loader2 className="animate-spin" />
         ) : items.length === 0 ? (
-          <EmptyState />
+          <div className="text-center flex flex-col items-center gap-2">
+            <FolderOpen />
+            <p>No items</p>
+          </div>
+        ) : viewMode === "grid" ? (
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            {items.map((item) => (
+              <ItemCard
+                key={item._id}
+                item={item}
+                selected={selectedItems.includes(item._id)}
+                onSelect={toggleSelect}
+                onOpen={handleOpen}
+                onAction={handleAction}
+                onContextMenu={handleContextMenu}
+              />
+            ))}
+          </div>
         ) : (
-          <>
-            {/* GRID VIEW */}
-            {viewMode === "grid" ? (
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
-                {items.map((item) => (
-                  <ItemCard
-                    key={item._id}
-                    item={item}
-                    selected={selectedItems.includes(item._id)}
-                    onSelect={toggleSelect}
-                    onContextMenu={handleContextMenu}
-                    onOpen={handleOpen}
-                    onAction={handleAction}
-                  />
-                ))}
-              </div>
-            ) : (
-              /* LIST VIEW */
-              <div className="flex flex-col gap-1">
-                {items.map((item) => (
-                  <ItemRow
-                    key={item._id}
-                    item={item}
-                    selected={selectedItems.includes(item._id)}
-                    onSelect={toggleSelect}
-                    onContextMenu={handleContextMenu}
-                    onOpen={handleOpen}
-                    onAction={handleAction}
-                  />
-                ))}
-              </div>
-            )}
-          </>
+          <div className="flex flex-col gap-1">
+            {items.map((item) => (
+              <ItemRow
+                key={item._id}
+                item={item}
+                selected={selectedItems.includes(item._id)}
+                onSelect={toggleSelect}
+                onOpen={handleOpen}
+                onAction={handleAction}
+                onContextMenu={handleContextMenu}
+              />
+            ))}
+          </div>
         )}
       </div>
 
       {/* CONTEXT MENU */}
       {contextMenu && (
         <ItemContextMenu
-          x={contextMenu.x}
-          y={contextMenu.y}
-          item={contextMenu.item}
+          {...contextMenu}
           isOwner={contextMenu.item?.ownerId === userId}
+          mode={mode}
           onClose={() => setContextMenu(null)}
-          onAction={(action) =>
-            handleAction(action, contextMenu.item)
-          }
+          onAction={(a) => handleAction(a, contextMenu.item)}
         />
       )}
 
-      {/* BULK TOOLBAR */}
-      <BulkToolbar
-        count={selectedItems.length}
-        onAction={handleBulkAction}
-        onClear={clearSelection}
-        isTrash={mode === "trash"}
+      {/* DIALOGS */}
+      <PermissionsDialog
+        open={!!shareItem}
+        item={shareItem}
+        onClose={() => setShareItem(null)}
+        onSuccess={refreshItems}
       />
 
-      {/* DIALOGS */}
       <RenameDialog
         open={!!renameItem}
         item={renameItem}
         onClose={() => setRenameItem(null)}
-        onSuccess={() => {
-          setRenameItem(null);
-          refreshItems();
-        }}
+        onSuccess={refreshItems}
       />
 
       <MoveDialog
         open={!!moveItems}
         items={moveItems}
         onClose={() => setMoveItems(null)}
-        onSuccess={() => {
-          setMoveItems(null);
-          clearSelection();
-          refreshItems();
-        }}
-      />
-
-      <PermissionsDialog
-        open={!!shareItem}
-        item={shareItem}
-        onClose={() => setShareItem(null)}
+        onSuccess={refreshItems}
       />
 
       <DeleteConfirmDialog
         open={!!deleteItems}
         items={deleteItems}
         onClose={() => setDeleteItems(null)}
-        onConfirm={handleDeleteConfirm}
+        onConfirm={async () => {
+          await Promise.all(
+            deleteItems.map((item) =>
+              fetch(`/api/items/${item._id}`, { method: "DELETE" })
+            )
+          );
+          setDeleteItems(null);
+          refreshItems();
+        }}
       />
 
       <MediaViewer
         open={!!mediaItem}
         item={mediaItem}
-        items={previewableItems}
         onClose={() => setMediaItem(null)}
       />
     </div>
-  );
-}
-
-// -----------------------
-// MAIN EXPORT
-// -----------------------
-export default function DriveView({ folderId, mode = "drive" }) {
-  return (
-    <DriveContent folderId={folderId} mode={mode} />
   );
 }

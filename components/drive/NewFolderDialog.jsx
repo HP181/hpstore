@@ -3,7 +3,7 @@ import { useState } from "react";
 import { FolderPlus, X } from "lucide-react";
 
 const COLORS = [
-  { value: null,     label: "Blue",   hex: "#4B9CF5" },
+  { value: "blue",   label: "Blue",   hex: "#4B9CF5" }, 
   { value: "red",    label: "Red",    hex: "#EF4444" },
   { value: "green",  label: "Green",  hex: "#22C55E" },
   { value: "yellow", label: "Yellow", hex: "#EAB308" },
@@ -15,7 +15,7 @@ const COLORS = [
 
 export default function NewFolderDialog({ open, onClose, parentId, onSuccess }) {
   const [name, setName] = useState("Untitled folder");
-  const [color, setColor] = useState(null);
+const [color, setColor] = useState(COLORS[0].value);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 

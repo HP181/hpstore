@@ -49,6 +49,7 @@ export async function PATCH(request, { params }) {
 
     const { id } = await params; // ✅ FIX
     const item = await Item.findById(id);
+    console.log("itsmnam", item);
 
     if (!item)
       return NextResponse.json({ error: "Not found" }, { status: 404 });
@@ -58,6 +59,7 @@ export async function PATCH(request, { params }) {
     }
 
     const body = await request.json();
+    console.log("b", body);
 
     // STAR
     if (typeof body.starred === "boolean") {
@@ -108,6 +110,12 @@ export async function PATCH(request, { params }) {
 
       item.parentId = newParentId;
       item.path = newPath;
+    }
+
+    // RENAME
+    
+    if (body.name !== undefined) {
+      item.name = body.name.trim();
     }
 
     item.lastModifiedBy = userId;

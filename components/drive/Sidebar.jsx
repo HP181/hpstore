@@ -26,7 +26,7 @@ export default function Sidebar() {
   const { currentFolderId, refreshItems } = useDrive();
 
   useEffect(() => {
-    fetch("/api/storage")
+    fetch("/api/storagestats")
       .then((r) => r.json())
       .then((d) => setStorage(d))
       .catch(() => {});

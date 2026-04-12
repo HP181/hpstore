@@ -1,18 +1,14 @@
 // app/api/items/route.js
 import { NextResponse } from "next/server";
-import Item from "@/models/item"; // adjust path if needed
-import { auth } from "@clerk/nextjs/server";
+import Item from "@/models/item";
+import { auth, currentUser } from "@clerk/nextjs/server";
 import connectDB from "@/lib/mongodb";
 
-// =======================
-// GET: list / search / filter / sort
-// =======================
 export async function GET(req) {
   try {
     await connectDB();
 
     const { userId } = await auth();
-
     if (!userId) {
       return NextResponse.json(
         { success: false, message: "Unauthorized" },
@@ -23,12 +19,9 @@ export async function GET(req) {
     const { searchParams } = new URL(req.url);
 
     const parentId = searchParams.get("parentId");
+    const mode = searchParams.get("mode") || "drive";
     const type = searchParams.get("type");
     const search = searchParams.get("search");
-
-    const trashed = searchParams.get("trashed");
-    const starred = searchParams.get("starred");
-    const shared = searchParams.get("shared");
 
     const sortBy = searchParams.get("sortBy") || "createdAt";
     const order = searchParams.get("order") === "asc" ? 1 : -1;
@@ -37,73 +30,81 @@ export async function GET(req) {
     const limit = Math.min(parseInt(searchParams.get("limit") || "20"), 100);
     const skip = (page - 1) * limit;
 
-    // =========================
-    // BASE QUERY
-    // =========================
-    let query = {};
+    let query = {
+      isTrashed: false,
+    };
 
-    // -------------------------
-    // MODE HANDLING
-    // -------------------------
-    if (trashed === "true") {
+    // =========================
+    // MODE FILTERING
+    // =========================
+    if (mode === "trash") {
       query = {
-        ownerId: userId,
         isTrashed: true,
+        $or: [
+          { ownerId: userId },
+          { "permissions.userId": userId },
+        ],
       };
-    } else if (starred === "true") {
+    } 
+    else if (mode === "starred") {
       query = {
-        ownerId: userId,
         isTrashed: false,
         starredBy: userId,
+        $or: [
+          { ownerId: userId },
+          { "permissions.userId": userId },
+        ],
       };
-    } else if (shared === "true") {
+    } 
+    else if (mode === "shared") {
       query = {
         isTrashed: false,
         "permissions.userId": userId,
       };
-    } else {
-      // NORMAL DRIVE VIEW
+    } 
+    else {
+      // DRIVE MODE (IMPORTANT FIX)
       query = {
-        ownerId: userId,
         isTrashed: false,
+        $or: [
+          { ownerId: userId },
+          { "permissions.userId": userId },
+        ],
         parentId: parentId === "null" ? null : parentId,
       };
     }
 
-    // -------------------------
+    // =========================
     // TYPE FILTER
-    // -------------------------
+    // =========================
     if (type && ["file", "folder"].includes(type)) {
       query.type = type;
     }
 
-    // -------------------------
-    // SEARCH (SAFE fallback)
-    // -------------------------
-    if (search && search.trim()) {
-      query.name = {
-        $regex: search.trim(),
-        $options: "i",
+    // =========================
+    // SEARCH (FIXED - SAFE)
+    // =========================
+    if (search?.trim()) {
+      const regex = new RegExp(search.trim(), "i");
+
+      query = {
+        ...query,
+        $or: [
+          ...(query.$or || []),
+          { name: regex },
+          { mimeType: regex },
+        ],
       };
     }
 
-    // -------------------------
+    // =========================
     // SORT SAFETY
-    // -------------------------
-    const allowedSortFields = [
-      "createdAt",
-      "updatedAt",
-      "name",
-      "size",
-    ];
-
+    // =========================
+    const allowedSortFields = ["createdAt", "updatedAt", "name", "size"];
     const safeSortBy = allowedSortFields.includes(sortBy)
       ? sortBy
       : "createdAt";
 
-    // =========================
-    // FETCH
-    // =========================
     const [items, total] = await Promise.all([
       Item.find(query)
         .sort({ [safeSortBy]: order })
@@ -133,6 +134,82 @@ export async function GET(req) {
     );
   }
 }
+// import { NextResponse } from "next/server";
+// import { auth } from "@clerk/nextjs/server";
+// import connectDB from "@/lib/mongodb";
+// import Item from "@/models/item";
+
+// export async function GET(req) {
+//   try {
+//     const { userId } = await auth();
+//     if (!userId)
+//       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+//     await connectDB();
+
+//     const { searchParams } = new URL(req.url);
+
+//     const parentId = searchParams.get("parentId");
+//     const mode = searchParams.get("mode") || "drive";
+//     console.log("mode", mode);
+
+//     let query = {};
+
+//     // =========================
+//     // MODE-BASED FILTERING
+//     // =========================
+//     switch (mode) {
+//       case "trash":
+//         query = {
+//           isTrashed: true,
+//           $or: [
+//             { ownerId: userId },
+//             { "permissions.userId": userId },
+//           ],
+//         };
+//         break;
+
+//       case "starred":
+//         query = {
+//           isTrashed: false,
+//           starredBy: userId,
+//           $or: [
+//             { ownerId: userId },
+//             { "permissions.userId": userId },
+//           ],
+//         };
+//         break;
+
+//       case "shared":
+//         query = {
+//           isTrashed: false,
+//           ownerId: { $ne: userId },
+//           "permissions.userId": userId,
+//         };
+//         break;
+
+//       default: // drive
+//         query = {
+//           isTrashed: false,
+//           parentId: parentId || null,
+//           $or: [
+//             { ownerId: userId },
+//             { "permissions.userId": userId },
+//           ],
+//         };
+//         break;
+//     }
+
+//     console.log("q", query);
+//     const items = await Item.find(query).sort({ updatedAt: -1 });
+//     console.log("f", items);
+
+//     return NextResponse.json({ items });
+
+//   } catch (error) {
+//     return NextResponse.json({ error: error.message }, { status: 500 });
+//   }
+// }
 
 // =======================
 // POST: create folder/file
@@ -141,9 +218,11 @@ export async function POST(req) {
   try {
     await connectDB();
 
-    const { userId } = await auth();
+    // const { userId } = await auth();
+    const user = await currentUser();
+    // console.log("current user:", user);
 
-    if (!userId) {
+    if (!user.id) {
       return NextResponse.json(
         { success: false, message: "Unauthorized" },
         { status: 401 }
@@ -151,18 +230,19 @@ export async function POST(req) {
     }
 
     const body = await req.json();
-    console.log("body:", body);
+    // console.log("body:", body);
 
     const {
       name,
       type,
-      ownerEmail,
+      // ownerEmail // ✅ FIX: from Clerk
       parentId,
       color,
       mimeType,
       size,
     } = body;
 
+    console.log("body destructured:", body);
     // -----------------------
     // FIXED VALIDATION
     // -----------------------
@@ -204,8 +284,8 @@ export async function POST(req) {
     const newItem = await Item.create({
       name: name.trim(),
       type,
-      ownerId: userId, // ✅ FIX: from Clerk
-      ownerEmail: ownerEmail || null,
+      ownerId: user.id, // ✅ FIX: from Clerk
+      ownerEmail: user.emailAddresses[0].emailAddress || null,
       parentId: parentId && parentId !== "null" ? parentId : null,
       color: type === "folder" ? color || null : null,
       mimeType: type === "file" ? mimeType || null : null,

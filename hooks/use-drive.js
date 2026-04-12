@@ -12,163 +12,135 @@ import { usePathname } from "next/navigation";
 
 const DriveContext = createContext(null);
 
-export function DriveProvider({
-  children,
-  initialFolderId = null,
-  mode = "drive",
-}) {
-  const pathname = usePathname(); // ✅ FIX: moved inside component
+export function DriveProvider({ children, initialFolderId = null }) {
+  const pathname = usePathname();
+
+  const mode = pathname?.startsWith("/trash")
+    ? "trash"
+    : pathname?.startsWith("/starred")
+    ? "starred"
+    : pathname?.startsWith("/shared")
+    ? "shared"
+    : "drive";
 
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [currentFolderId, setCurrentFolderId] = useState(initialFolderId);
 
-  const [search, setSearch] = useState("");
-const [sortBy, setSortBy] = useState("name");
+  const [search, _setSearch] = useState("");
+  const [sortBy, setSortBy] = useState("name");
   const [sortOrder, setSortOrder] = useState("asc");
   const [viewMode, setViewMode] = useState("grid");
   const [filterType, setFilterType] = useState("all");
-
   const [selectedItems, setSelectedItems] = useState([]);
 
   const fetchRef = useRef(0);
 
-  // ✅ FIX: sync URL → folderId properly
-  useEffect(() => {
-    const match = pathname?.match(/\/drive\/([^/]+)/);
-
-    if (match?.[1]) {
-      setCurrentFolderId(match[1]);
-    } else {
-      setCurrentFolderId(null);
-    }
-  }, [pathname]);
-
-  useEffect(() => {
-  setCurrentFolderId(initialFolderId);
-}, [initialFolderId]);
-
-
-  useEffect(() => {
-  setSearch("");
-}, [currentFolderId]);
-
-const fetchItems = useCallback(async () => {
-  const fetchId = ++fetchRef.current;
-  setLoading(true);
-
-  try {
-    const params = new URLSearchParams();
-
-    // --------------------
-    // MODE FILTERS
-    // --------------------
-    if (mode === "trash") {
-      params.set("trashed", "true");
-    } else if (mode === "starred") {
-      params.set("starred", "true");
-    } else if (mode === "shared") {
-      params.set("shared", "true");
-    } else {
-      params.set("parentId", currentFolderId || "null");
-    }
-
-    // --------------------
-    // SEARCH
-    // --------------------
-    if (search?.trim()) {
-      params.set("search", search.trim());
-    }
-
-    // --------------------
-    // FILTER TYPE
-    // --------------------
-    if (filterType !== "all") {
-      params.set("type", filterType);
-    }
-
-    // --------------------
-    // SORT
-    // --------------------
-    params.set("sortBy", sortBy);
-    params.set("order", sortOrder);
-
-    const res = await fetch(`/api/items?${params.toString()}`);
-    const data = await res.json();
-    console .log("Fetched items:", data.data);
-
-    if (fetchId === fetchRef.current) {
-      setItems(data.data || []);
-      setSelectedItems([]);
-    }
-  } catch (err) {
-    console.error("Fetch error:", err);
-  } finally {
-    if (fetchId === fetchRef.current) {
-      setLoading(false);
-    }
-  }
-}, [currentFolderId, search, sortBy, sortOrder, filterType, mode]);
-
-useEffect(() => {
-  fetchItems();
-}, [
-  currentFolderId,
-  search,
-  sortBy,
-  sortOrder,
-  filterType,
-  mode,
-]);
-
-  const refreshItems = useCallback(() => fetchItems(), [fetchItems]);
-
-  const toggleSelect = useCallback((id) => {
-    setSelectedItems((prev) =>
-      prev.includes(id)
-        ? prev.filter((i) => i !== id)
-        : [...prev, id]
-    );
+  const setSearch = useCallback((val) => {
+    _setSearch(val);
   }, []);
 
-  const selectAll = useCallback(() => {
-    setSelectedItems(items.map((i) => i._id));
-  }, [items]);
+  useEffect(() => {
+    if (mode !== "drive") {
+      setCurrentFolderId(null);
+      return;
+    }
 
-  const clearSelection = useCallback(() => setSelectedItems([]), []);
+    const match = pathname?.match(/\/drive\/([^/]+)/);
+    setCurrentFolderId(match?.[1] || null);
+  }, [pathname, mode]);
+
+  useEffect(() => {
+    setSearch("");
+  }, [currentFolderId, mode]);
+
+  const toggleSelect = useCallback((id) => {
+  setSelectedItems((prev) =>
+    prev.includes(id)
+      ? prev.filter((x) => x !== id)
+      : [...prev, id]
+  );
+}, []);
+
+const clearSelection = useCallback(() => {
+  setSelectedItems([]);
+}, []);
+
+const selectAll = useCallback(() => {
+  setSelectedItems(items.map((i) => i._id));
+}, [items]);
+
+  const fetchItems = useCallback(async () => {
+    const fetchId = ++fetchRef.current;
+    setLoading(true);
+
+    try {
+      const params = new URLSearchParams();
+
+      params.set("mode", mode);
+
+      if (mode === "drive") {
+        params.set("parentId", currentFolderId || "null");
+      }
+
+      if (search?.trim()) {
+        params.set("search", search.trim());
+      }
+
+      if (filterType !== "all") {
+        params.set("type", filterType);
+      }
+
+      params.set("sortBy", sortBy);
+      params.set("order", sortOrder);
+
+      const res = await fetch(`/api/items?${params.toString()}`);
+      const data = await res.json();
+
+      if (fetchId === fetchRef.current) {
+        setItems(data.data || []);
+        setSelectedItems([]);
+      }
+    } finally {
+      if (fetchId === fetchRef.current) setLoading(false);
+    }
+  }, [currentFolderId, search, sortBy, sortOrder, filterType, mode]);
+
+  useEffect(() => {
+    fetchItems();
+  }, [fetchItems]);
 
   return (
     <DriveContext.Provider
       value={{
-        items,
-        loading,
+  items,
+  loading,
+  currentFolderId,
+  setCurrentFolderId,
 
-        currentFolderId,
-        setCurrentFolderId,
+  search,
+  setSearch,
 
-        search,
-        setSearch,
+  sortBy,
+  setSortBy,
+  sortOrder,
+  setSortOrder,
 
-        sortBy,
-        setSortBy,
+  viewMode,
+  setViewMode,
+  filterType,
+  setFilterType,
 
-        sortOrder,
-        setSortOrder,
+  selectedItems,
+  setSelectedItems,
 
-        viewMode,
-        setViewMode,
+  toggleSelect,
+  clearSelection,
+  selectAll,
 
-        filterType,
-        setFilterType,
-
-        selectedItems,
-        toggleSelect,
-        selectAll,
-        clearSelection,
-
-        refreshItems,
-        mode,
-      }}
+  mode,
+  refreshItems: fetchItems,
+}}
     >
       {children}
     </DriveContext.Provider>
